@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────
+# .NET build output
+# ─────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+*.user
+*.suo
+*.userprefs
+*.cache
+*.log
+*.pidb
+*.swp
+*.sln.docstates
+
+# ─────────────────────────────────────────────
+# Visual Studio
+# ─────────────────────────────────────────────
+.vs/
+*.vspscc
+*.vssscc
+.build/
+TestResults/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+*.trx
+
+# ─────────────────────────────────────────────
+# Editors
+# ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.DotSettings.user
+
+# ─────────────────────────────────────────────
+# NuGet
+# ─────────────────────────────────────────────
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+project.lock.json
+project.fragment.lock.json
+nuget.exe
+.nuget/
+
+# ─────────────────────────────────────────────
+# Node / front-end tooling (if added later)
+# ─────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ─────────────────────────────────────────────
+# Local runtime, environment, and secrets
+# ─────────────────────────────────────────────
+appsettings.*.Local.json
+appsettings.Local.json
+*.env
+.env
+.env.*
+secrets.json
+*.pfx
+*.key
+
+# ─────────────────────────────────────────────
+# Database / volumes
+# ─────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# ─────────────────────────────────────────────
+# OS junk
+# ─────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

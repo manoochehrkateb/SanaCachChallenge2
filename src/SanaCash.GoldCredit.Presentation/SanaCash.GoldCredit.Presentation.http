@@ -1,0 +1,6 @@
+@SanaCash.GoldCredit.Presentation_HostAddress = http://localhost:5285
+
+GET {{SanaCash.GoldCredit.Presentation_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
