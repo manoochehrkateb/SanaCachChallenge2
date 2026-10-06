@@ -68,6 +68,7 @@ public class PostgresPriceTickRepository(
     {
         var entity = await Entities
             .AsNoTracking()
+            .Where(item => item.Instrument == Instrument.Xau750.Code)
             .OrderByDescending(item => item.Timestamp)
             .FirstOrDefaultAsync(cancellationToken);
 

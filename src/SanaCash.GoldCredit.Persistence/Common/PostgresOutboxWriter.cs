@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
+using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Persistence.Common;
 
@@ -28,7 +29,9 @@ public class PostgresOutboxWriter(
             EventType = typeof(TIntegrationEvent).Name,
             AggregateId = partitionKey,
             Payload = JsonSerializer.Serialize(integrationEvent, JsonOptions),
-            OccurredAt = DateTimeOffset.UtcNow,
+            OccurredAt = integrationEvent is IDomainEvent domainEvent
+                ? domainEvent.OccurredAtUtc.ToUniversalTime()
+                : DateTimeOffset.UtcNow,
             Attempts = 0
         };
 

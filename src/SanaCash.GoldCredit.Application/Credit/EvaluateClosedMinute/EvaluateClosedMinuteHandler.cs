@@ -1,4 +1,5 @@
 using SanaCash.GoldCredit.Application.Abstractions.Common;
+using SanaCash.GoldCredit.Application.Abstractions.Common;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
 using SanaCash.GoldCredit.Domain.Credit;
 using SanaCash.GoldCredit.Domain.Credit.Enums;
@@ -18,21 +19,77 @@ public class EvaluateClosedMinuteHandler(
     public async Task<MarginEvaluationResult> EvaluateLatestAsync(CancellationToken cancellationToken = default)
     {
         var now = clock.UtcNow;
-        var minute = MinuteBucket.From(now.AddSeconds(-65));
+        var latestMinute = MinuteBucket.From(now.AddSeconds(-65));
         var watermark = await evaluations.GetWatermarkAsync(Instrument.Xau750, cancellationToken);
-        if (watermark is not null && watermark.StartUtc >= minute.StartUtc)
+        if (watermark is not null && watermark.StartUtc >= latestMinute.StartUtc)
         {
             return new MarginEvaluationResult(false, false, false, 0, 0);
         }
 
         var skippedGap = watermark is not null
-            && minute.StartUtc - watermark.StartUtc > TimeSpan.FromMinutes(1);
+            && latestMinute.StartUtc - watermark.StartUtc > TimeSpan.FromMinutes(1);
+        var facilitiesEvaluated = 0;
+        var transitionsProposed = 0;
+        var applied = false;
+
+        if (watermark is not null)
+        {
+            for (var minute = watermark.StartUtc.AddMinutes(1);
+                 minute < latestMinute.StartUtc;
+                 minute = minute.AddMinutes(1))
+            {
+                var gapResult = await EvaluateMinuteAsync(
+                    MinuteBucket.From(minute), allowTransitions: false, cancellationToken);
+                if (gapResult.PausedForStaleFeed)
+                {
+                    return new MarginEvaluationResult(
+                        applied, true, skippedGap, facilitiesEvaluated, transitionsProposed);
+                }
+
+                applied |= gapResult.Applied;
+                facilitiesEvaluated = Math.Max(facilitiesEvaluated, gapResult.FacilitiesEvaluated);
+            }
+        }
+
+        var latestResult = await EvaluateMinuteAsync(
+            latestMinute, allowTransitions: true, cancellationToken);
+        return new MarginEvaluationResult(
+            applied || latestResult.Applied,
+            latestResult.PausedForStaleFeed,
+            skippedGap,
+            Math.Max(facilitiesEvaluated, latestResult.FacilitiesEvaluated),
+            latestResult.TransitionsProposed);
+    }
+
+    private async Task<MarginEvaluationResult> EvaluateMinuteAsync(
+        MinuteBucket minute,
+        bool allowTransitions,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
         var batch = await evaluations.LoadInputsAsync(minute, cancellationToken);
         if (stalenessPolicy.Evaluate(batch.LatestRealTickUtc, now) == FeedState.Stale)
         {
-            return new MarginEvaluationResult(false, true, skippedGap, batch.Facilities.Count, 0);
+            return new MarginEvaluationResult(false, true, false, batch.Facilities.Count, 0);
         }
 
+        var transitions = allowTransitions
+            ? BuildTransitions(minute, batch, now)
+            : [];
+        var applied = await unitOfWork.ExecuteInTransactionAsync(
+            transactionToken => evaluations.TryApplyEvaluationAsync(
+                minute, batch, transitions, transactionToken),
+            cancellationToken);
+
+        return new MarginEvaluationResult(
+            applied, false, false, batch.Facilities.Count, transitions.Count);
+    }
+
+    private IReadOnlyList<MarginTransition> BuildTransitions(
+        MinuteBucket minute,
+        MarginEvaluationBatch batch,
+        DateTimeOffset now)
+    {
         var transitions = new List<MarginTransition>();
         foreach (var facility in batch.Facilities)
         {
@@ -55,7 +112,8 @@ public class EvaluateClosedMinuteHandler(
                 (FacilityStatus.Healthy, FacilityStatus.MarginCall) => MarginEventType.MarginCallIssued,
                 (FacilityStatus.MarginCall, FacilityStatus.Healthy) => MarginEventType.MarginCallCured,
                 (_, FacilityStatus.LiquidationRequired) => MarginEventType.LiquidationRequired,
-                _ => throw new InvalidOperationException($"Unexpected margin transition: {facility.Status} -> {newStatus}.")
+                _ => throw new InvalidOperationException(
+                    $"Unexpected margin transition: {facility.Status} -> {newStatus}.")
             };
             var evidenceSnapshots = eventType == MarginEventType.MarginCallIssued
                 ? orderedSnapshots.TakeLast(MarginThresholds.ConsecutiveBreachMinutes)
@@ -71,9 +129,6 @@ public class EvaluateClosedMinuteHandler(
                 newStatus, eventType, evidence.Value, now));
         }
 
-        var applied = await unitOfWork.ExecuteInTransactionAsync(
-            transactionToken => evaluations.TryApplyEvaluationAsync(minute, batch, transitions, transactionToken),
-            cancellationToken);
-        return new MarginEvaluationResult(applied, false, skippedGap, batch.Facilities.Count, transitions.Count);
+        return transitions;
     }
 }

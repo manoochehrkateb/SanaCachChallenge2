@@ -68,9 +68,14 @@ public class CreditFacility : AggregateRoot<FacilityId>
 
     public Result Release(FineWeightMg amount, ReferencePrice price, DateTimeOffset occurredAtUtc)
     {
-        if (Status != FacilityStatus.Healthy)
+        if (Status == FacilityStatus.MarginCall)
         {
-            return Result.Failure(new Error("FacilityNotHealthy", "Collateral release requires a healthy facility."));
+            return Result.Failure(new Error("FacilityInMarginCall", "Collateral release is not allowed while the facility is in margin call."));
+        }
+
+        if (Status == FacilityStatus.LiquidationRequired)
+        {
+            return Result.Failure(new Error("FacilityLiquidationRequired", "Collateral release is not allowed after liquidation is required."));
         }
 
         if (amount.Value <= 0)
@@ -103,7 +108,12 @@ public class CreditFacility : AggregateRoot<FacilityId>
 
     public Result Drawdown(Irr amount, ReferencePrice price, DateTimeOffset occurredAtUtc)
     {
-        if (Status != FacilityStatus.Healthy)
+        if (Status == FacilityStatus.MarginCall)
+        {
+            return Result.Failure(new Error("FacilityInMarginCall", "Drawdown is not allowed while the facility is in margin call."));
+        }
+
+        if (Status == FacilityStatus.LiquidationRequired)
         {
             return Result.Failure(new Error("FacilityLiquidationRequired", "Drawdown is not allowed after liquidation is required."));
         }

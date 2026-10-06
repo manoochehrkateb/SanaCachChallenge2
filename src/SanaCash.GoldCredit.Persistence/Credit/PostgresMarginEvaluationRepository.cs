@@ -19,6 +19,8 @@ public class PostgresMarginEvaluationRepository(
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
+    private static readonly JsonSerializerOptions EventJsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<MinuteBucket?> GetWatermarkAsync(Instrument instrument, CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -225,16 +227,20 @@ public class PostgresMarginEvaluationRepository(
             newStatus = transition.NewStatus.ToString(),
             eventType = transition.EventType.ToString(),
             occurredAtUtc = transition.OccurredAtUtc,
-            evidence = transition.Evidence.Snapshots.Select(snapshot => new
-            {
-                minuteStartUtc = snapshot.Minute.StartUtc,
-                referencePriceIrrPerGram = snapshot.Close.IrrPerGram,
-                debtIrr = snapshot.Debt.Value,
-                collateralFineMg = snapshot.Collateral.Value,
-                collateralValueIrr = snapshot.Value.Irr,
-                ltvBps = snapshot.Ltv.BasisPoints.ToString(CultureInfo.InvariantCulture),
-                isLtvInfinite = snapshot.Ltv.IsInfinite
-            }).ToArray()
+            evidence = transition.Evidence.Snapshots
+                .Select(snapshot => JsonSerializer.SerializeToElement(new
+                {
+                    minuteStartUtc = snapshot.Minute.StartUtc,
+                    referencePriceIrrPerGram = snapshot.Close.IrrPerGram,
+                    debtIrr = snapshot.Debt.Value,
+                    collateralFineMg = snapshot.Collateral.Value,
+                    collateralValueIrr = snapshot.Value.Irr,
+                    ltvBps = snapshot.Ltv.IsInfinite
+                        ? 0L
+                        : checked((long)snapshot.Ltv.BasisPoints),
+                    isLtvInfinite = snapshot.Ltv.IsInfinite
+                }, EventJsonOptions))
+                .ToArray()
         }).ToArray();
         var json = JsonSerializer.Serialize(rows, JsonOptions);
         const string sql = """

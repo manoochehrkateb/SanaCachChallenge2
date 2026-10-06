@@ -18,13 +18,13 @@ public class OutboxPublisher(
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var messages = new List<PendingMessage>();
         await using (var select = new NpgsqlCommand(
-            "SELECT current.event_id, current.event_type, current.aggregate_id, current.payload::text, current.occurred_at " +
+            "SELECT current.outbox_sequence, current.event_id, current.event_type, current.aggregate_id, current.payload::text, current.occurred_at " +
             "FROM platform.outbox_messages AS current " +
             "WHERE current.published_at IS NULL " +
             "AND NOT EXISTS (SELECT 1 FROM platform.outbox_messages AS earlier " +
             "WHERE earlier.aggregate_id = current.aggregate_id AND earlier.published_at IS NULL " +
-            "AND (earlier.occurred_at, earlier.event_id) < (current.occurred_at, current.event_id)) " +
-            "ORDER BY current.occurred_at, current.event_id " +
+            "AND earlier.outbox_sequence < current.outbox_sequence) " +
+            "ORDER BY current.outbox_sequence " +
             "FOR UPDATE OF current SKIP LOCKED LIMIT 100;",
             connection,
             transaction))
@@ -33,8 +33,8 @@ public class OutboxPublisher(
             while (await reader.ReadAsync(cancellationToken))
             {
                 messages.Add(new PendingMessage(
-                    reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                    reader.GetFieldValue<DateTimeOffset>(4)));
+                    reader.GetInt64(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3),
+                    reader.GetString(4), reader.GetFieldValue<DateTimeOffset>(5)));
             }
         }
 
@@ -83,6 +83,7 @@ public class OutboxPublisher(
     }
 
     private sealed record PendingMessage(
+        long OutboxSequence,
         Guid EventId,
         string EventType,
         string AggregateId,

@@ -1,10 +1,12 @@
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Application.Abstractions.Authentication;
 using SanaCash.GoldCredit.Application.Abstractions.Common;
 using SanaCash.GoldCredit.Application.Abstractions.Pricing;
 using SanaCash.GoldCredit.Application.Credit.ExecuteDrawdown;
 using SanaCash.GoldCredit.Application.Credit.PledgeCollateral;
 using SanaCash.GoldCredit.Application.Credit.ReleaseCollateral;
+using SanaCash.GoldCredit.Application.Credit.RepayDebt;
 using SanaCash.GoldCredit.Application.Pricing.IngestPriceTick;
 using SanaCash.GoldCredit.Domain.Credit;
 using SanaCash.GoldCredit.Domain.Custody;
@@ -52,6 +54,335 @@ public class PostgresCoreFlowTests
             cleanup);
         deleteTicks.Parameters.AddWithValue("sequences", new[] { sequence, sequence + 1, sequence + 2 });
         await deleteTicks.ExecuteNonQueryAsync();
+    }
+
+    [PostgresIntegrationFact]
+    public async Task Candle_gap_is_carried_only_while_the_real_feed_is_live()
+    {
+        await using var dataSource = CreateDataSource();
+        await new MigrationRunner(dataSource).ApplyAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var sequence = Random.Shared.NextInt64(1, long.MaxValue - 10);
+        var tick = CreateTick(sequence, now.AddSeconds(-30));
+        await InsertTickAsync(dataSource, tick);
+
+        try
+        {
+            var context = new GoldCreditDbContext(
+                new DbContextOptionsBuilder<GoldCreditDbContext>()
+                    .UseNpgsql(dataSource)
+                    .Options);
+            var store = new PostgresMarketReadStore(
+                context,
+                new PostgresSession(),
+                new FixedClock(now),
+                new FeedStalenessPolicy());
+
+            var start = MinuteBucket.From(now.AddMinutes(-1)).StartUtc;
+            var candles = await store.GetCandlesAsync(
+                Instrument.Xau750, start, start.AddMinutes(3));
+
+            Assert.Equal(3, candles.Count);
+            Assert.Contains(candles, candle => candle.CarriedForward);
+            Assert.Contains(candles, candle => candle.CloseIrr == 120_000_000);
+        }
+        finally
+        {
+            await using var cleanup = await dataSource.OpenConnectionAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM pricing.price_ticks WHERE instrument = 'XAU-750' AND sequence = @sequence; " +
+                "DELETE FROM pricing.price_tick_keys WHERE instrument = 'XAU-750' AND sequence = @sequence;",
+                cleanup);
+            delete.Parameters.AddWithValue("sequence", sequence);
+            await delete.ExecuteNonQueryAsync();
+        }
+    }
+
+    [PostgresIntegrationFact]
+    public async Task Concurrent_same_key_pledges_debit_custody_once()
+    {
+        await using var dataSource = CreateDataSource();
+        await new MigrationRunner(dataSource).ApplyAsync();
+
+        var clientId = Guid.NewGuid();
+        var facilityId = Guid.NewGuid();
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var seed = new NpgsqlCommand(
+            "INSERT INTO custody.holdings (client_id, instrument, free_fine_mg) " +
+            "VALUES (@client_id, 'XAU-750', 20000); " +
+            "INSERT INTO credit.facilities " +
+            "(facility_id, client_id, instrument, status) " +
+            "VALUES (@facility_id, @client_id, 'XAU-750', 'Healthy');",
+            connection))
+        {
+            seed.Parameters.AddWithValue("client_id", clientId);
+            seed.Parameters.AddWithValue("facility_id", facilityId);
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var results = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+            {
+                var session = new PostgresSession();
+                var handler = new PledgeCollateralHandler(
+                    new TestCurrentClient(ClientId.Create(clientId).Value),
+                    new PostgresCreditFacilityRepository(session),
+                    new PostgresCustodyHoldingRepository(session),
+                    new CollateralTransferService(),
+                    new FixedClock(DateTimeOffset.UtcNow),
+                    new PostgresUnitOfWork(dataSource, session),
+                    new PostgresIdempotencyStore(session));
+                return await handler.HandleAsync(
+                    new PledgeCollateralCommand(facilityId, 20_000, "pledge-once"));
+            })));
+
+            Assert.All(results, result => Assert.True(result.IsSuccess));
+
+            await using var verify = await dataSource.OpenConnectionAsync();
+            await using (var facility = new NpgsqlCommand(
+                "SELECT collateral_fine_mg, version FROM credit.facilities WHERE facility_id = @facility_id;",
+                verify))
+            {
+                facility.Parameters.AddWithValue("facility_id", facilityId);
+                await using var reader = await facility.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(20_000, reader.GetInt64(0));
+                Assert.Equal(1, reader.GetInt64(1));
+            }
+
+            await using (var holding = new NpgsqlCommand(
+                "SELECT free_fine_mg FROM custody.holdings WHERE client_id = @client_id AND instrument = 'XAU-750';",
+                verify))
+            {
+                holding.Parameters.AddWithValue("client_id", clientId);
+                Assert.Equal(0L, (long)(await holding.ExecuteScalarAsync())!);
+            }
+        }
+
+        finally
+        {
+            await using var cleanup = await dataSource.OpenConnectionAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM platform.idempotency_records WHERE client_id = @client_id; " +
+                "DELETE FROM credit.facilities WHERE facility_id = @facility_id; " +
+                "DELETE FROM custody.holdings WHERE client_id = @client_id;",
+                cleanup);
+            delete.Parameters.AddWithValue("client_id", clientId);
+            delete.Parameters.AddWithValue("facility_id", facilityId);
+            await delete.ExecuteNonQueryAsync();
+        }
+    }
+
+    [PostgresIntegrationFact]
+    public async Task One_minute_candle_uses_timestamp_order_for_ohlc_and_count()
+    {
+        await using var dataSource = CreateDataSource();
+        await new MigrationRunner(dataSource).ApplyAsync();
+
+        var minute = MinuteBucket.From(DateTimeOffset.UtcNow.AddMinutes(-5)).StartUtc;
+        var sequences = new[]
+        {
+            Random.Shared.NextInt64(1, long.MaxValue - 10),
+            Random.Shared.NextInt64(1, long.MaxValue - 10),
+            Random.Shared.NextInt64(1, long.MaxValue - 10)
+        };
+        var ticks = new[]
+        {
+            (sequences[0], minute.AddSeconds(55), 103_000_000L),
+            (sequences[1], minute.AddSeconds(5), 102_000_000L),
+            (sequences[2], minute.AddSeconds(30), 101_000_000L)
+        };
+
+        try
+        {
+            await using var connection = await dataSource.OpenConnectionAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            foreach (var tick in ticks)
+            {
+                await using (var key = new NpgsqlCommand(
+                    "INSERT INTO pricing.price_tick_keys (instrument, sequence, payload_hash) " +
+                    "VALUES ('XAU-750', @sequence, @hash);", connection, transaction))
+                {
+                    key.Parameters.AddWithValue("sequence", tick.Item1);
+                    key.Parameters.AddWithValue("hash", BitConverter.GetBytes(tick.Item1));
+                    await key.ExecuteNonQueryAsync();
+                }
+
+                await using var insert = new NpgsqlCommand(
+                    "INSERT INTO pricing.price_ticks (ts, instrument, sequence, price_irr_per_gram) " +
+                    "VALUES (@timestamp, 'XAU-750', @sequence, @price);", connection, transaction);
+                insert.Parameters.AddWithValue("timestamp", tick.Item2);
+                insert.Parameters.AddWithValue("sequence", tick.Item1);
+                insert.Parameters.AddWithValue("price", tick.Item3);
+                await insert.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            await using var query = new NpgsqlCommand(
+                "SELECT open_irr_per_gram, high_irr_per_gram, low_irr_per_gram, " +
+                "close_irr_per_gram, tick_count FROM pricing.price_candles_1m " +
+                "WHERE instrument = 'XAU-750' AND bucket = time_bucket('1 minute', @minute);",
+                connection);
+            query.Parameters.AddWithValue("minute", minute);
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(102_000_000, reader.GetInt64(0));
+            Assert.Equal(103_000_000, reader.GetInt64(1));
+            Assert.Equal(101_000_000, reader.GetInt64(2));
+            Assert.Equal(103_000_000, reader.GetInt64(3));
+            Assert.Equal(3, reader.GetInt64(4));
+        }
+        finally
+        {
+            await using var cleanup = await dataSource.OpenConnectionAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM pricing.price_ticks WHERE instrument = 'XAU-750' AND sequence = ANY(@sequences); " +
+                "DELETE FROM pricing.price_tick_keys WHERE instrument = 'XAU-750' AND sequence = ANY(@sequences);",
+                cleanup);
+            delete.Parameters.AddWithValue("sequences", sequences);
+            await delete.ExecuteNonQueryAsync();
+        }
+    }
+
+    [PostgresIntegrationFact]
+    public async Task Concurrent_same_key_releases_move_collateral_once()
+    {
+        await using var dataSource = CreateDataSource();
+        await new MigrationRunner(dataSource).ApplyAsync();
+
+        var clientId = Guid.NewGuid();
+        var facilityId = Guid.NewGuid();
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var seed = new NpgsqlCommand(
+            "INSERT INTO custody.holdings (client_id, instrument, free_fine_mg) " +
+            "VALUES (@client_id, 'XAU-750', 0); " +
+            "INSERT INTO credit.facilities " +
+            "(facility_id, client_id, instrument, collateral_fine_mg, debt_irr, status, version) " +
+            "VALUES (@facility_id, @client_id, 'XAU-750', 100000, 0, 'Healthy', 0);",
+            connection))
+        {
+            seed.Parameters.AddWithValue("client_id", clientId);
+            seed.Parameters.AddWithValue("facility_id", facilityId);
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var results = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+            {
+                var session = new PostgresSession();
+                var handler = new ReleaseCollateralHandler(
+                    new TestCurrentClient(ClientId.Create(clientId).Value),
+                    new PostgresCreditFacilityRepository(session),
+                    new PostgresCustodyHoldingRepository(session),
+                    new FixedReferencePriceProvider(new ReferencePriceQuote(
+                        ReferencePrice.Create(120_000_000).Value, now)),
+                    new PriceFreshnessPolicy(),
+                    new FixedClock(now),
+                    new PostgresUnitOfWork(dataSource, session),
+                    new PostgresIdempotencyStore(session));
+                return await handler.HandleAsync(
+                    new ReleaseCollateralCommand(facilityId, 10_000, "release-once"));
+            })));
+
+            Assert.All(results, result => Assert.True(result.IsSuccess));
+
+            await using var verify = await dataSource.OpenConnectionAsync();
+            await using (var facility = new NpgsqlCommand(
+                "SELECT collateral_fine_mg, version FROM credit.facilities WHERE facility_id = @facility_id;",
+                verify))
+            {
+                facility.Parameters.AddWithValue("facility_id", facilityId);
+                await using var reader = await facility.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                Assert.Equal(90_000, reader.GetInt64(0));
+                Assert.Equal(1, reader.GetInt64(1));
+            }
+
+            await using (var holding = new NpgsqlCommand(
+                "SELECT free_fine_mg FROM custody.holdings WHERE client_id = @client_id AND instrument = 'XAU-750';",
+                verify))
+            {
+                holding.Parameters.AddWithValue("client_id", clientId);
+                Assert.Equal(10_000L, (long)(await holding.ExecuteScalarAsync())!);
+            }
+        }
+        finally
+        {
+            await using var cleanup = await dataSource.OpenConnectionAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM platform.idempotency_records WHERE client_id = @client_id; " +
+                "DELETE FROM credit.facilities WHERE facility_id = @facility_id; " +
+                "DELETE FROM custody.holdings WHERE client_id = @client_id;",
+                cleanup);
+            delete.Parameters.AddWithValue("client_id", clientId);
+            delete.Parameters.AddWithValue("facility_id", facilityId);
+            await delete.ExecuteNonQueryAsync();
+        }
+    }
+
+    [PostgresIntegrationFact]
+    public async Task Concurrent_same_key_repayments_apply_debt_change_once()
+    {
+        await using var dataSource = CreateDataSource();
+        await new MigrationRunner(dataSource).ApplyAsync();
+
+        var clientId = Guid.NewGuid();
+        var facilityId = Guid.NewGuid();
+        await using (var connection = await dataSource.OpenConnectionAsync())
+        await using (var seed = new NpgsqlCommand(
+            "INSERT INTO credit.facilities " +
+            "(facility_id, client_id, instrument, collateral_fine_mg, debt_irr, status, version) " +
+            "VALUES (@facility_id, @client_id, 'XAU-750', 100000, 1000000000, 'Healthy', 0);",
+            connection))
+        {
+            seed.Parameters.AddWithValue("facility_id", facilityId);
+            seed.Parameters.AddWithValue("client_id", clientId);
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var results = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+            {
+                var session = new PostgresSession();
+                var handler = new RepayDebtHandler(
+                    new TestCurrentClient(ClientId.Create(clientId).Value),
+                    new PostgresCreditFacilityRepository(session),
+                    new FixedClock(DateTimeOffset.UtcNow),
+                    new PostgresUnitOfWork(dataSource, session),
+                    new PostgresIdempotencyStore(session));
+                return await handler.HandleAsync(
+                    new RepayDebtCommand(facilityId, 100_000_000, "repay-once"));
+            })));
+
+            Assert.All(results, result => Assert.True(result.IsSuccess));
+
+            await using var verify = await dataSource.OpenConnectionAsync();
+            await using var query = new NpgsqlCommand(
+                "SELECT debt_irr, version FROM credit.facilities WHERE facility_id = @facility_id;",
+                verify);
+            query.Parameters.AddWithValue("facility_id", facilityId);
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(900_000_000, reader.GetInt64(0));
+            Assert.Equal(1, reader.GetInt64(1));
+        }
+        finally
+        {
+            await using var cleanup = await dataSource.OpenConnectionAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM platform.idempotency_records WHERE client_id = @client_id; " +
+                "DELETE FROM credit.facilities WHERE facility_id = @facility_id;",
+                cleanup);
+            delete.Parameters.AddWithValue("client_id", clientId);
+            delete.Parameters.AddWithValue("facility_id", facilityId);
+            await delete.ExecuteNonQueryAsync();
+        }
     }
 
     [PostgresIntegrationFact]

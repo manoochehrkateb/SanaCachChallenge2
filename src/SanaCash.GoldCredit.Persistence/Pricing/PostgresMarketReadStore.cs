@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
+using SanaCash.GoldCredit.Application.Abstractions.Common;
+using SanaCash.GoldCredit.Domain.Pricing;
 using SanaCash.GoldCredit.Domain.Shared;
 using SanaCash.GoldCredit.Persistence.Common;
 
@@ -7,7 +9,9 @@ namespace SanaCash.GoldCredit.Persistence.Pricing;
 
 public class PostgresMarketReadStore(
     GoldCreditDbContext context,
-    PostgresSession session) : GenericRepository<PriceCandleEntity>(context, session), IMarketReadStore
+    PostgresSession session,
+    IClock clock,
+    FeedStalenessPolicy stalenessPolicy) : GenericRepository<PriceCandleEntity>(context, session), IMarketReadStore
 {
     public async Task<IReadOnlyList<PriceCandleReadModel>> GetCandlesAsync(
         Instrument instrument,
@@ -45,6 +49,14 @@ public class PostgresMarketReadStore(
             .Select(item => (long?)item.CloseIrrPerGram)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var latestRealTickUtc = await context.Set<PriceTickEntity>()
+            .AsNoTracking()
+            .Where(item => item.Instrument == instrument.Code)
+            .Select(item => (DateTimeOffset?)item.Timestamp)
+            .MaxAsync(cancellationToken);
+        var canCarryForward = stalenessPolicy.Evaluate(latestRealTickUtc, clock.UtcNow)
+            == Domain.Pricing.Enums.FeedState.Live;
+
         var results = new List<PriceCandleReadModel>();
         for (var minute = start; minute < end; minute = minute.AddMinutes(1))
         {
@@ -55,8 +67,9 @@ public class PostgresMarketReadStore(
                 continue;
             }
 
+            var carriedClose = canCarryForward ? previousClose : null;
             results.Add(new PriceCandleReadModel(
-                minute, previousClose, previousClose, previousClose, previousClose, 0, previousClose is not null));
+                minute, carriedClose, carriedClose, carriedClose, carriedClose, 0, carriedClose is not null));
         }
 
         return results;

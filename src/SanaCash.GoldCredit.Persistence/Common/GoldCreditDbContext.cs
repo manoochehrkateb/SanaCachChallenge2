@@ -60,6 +60,9 @@ public class GoldCreditDbContext(DbContextOptions<GoldCreditDbContext> options) 
         {
             entity.ToTable("outbox_messages", "platform");
             entity.HasKey(item => item.EventId);
+            entity.Property(item => item.OutboxSequence)
+                .HasColumnName("outbox_sequence")
+                .ValueGeneratedOnAdd();
             entity.Property(item => item.EventId).HasColumnName("event_id");
             entity.Property(item => item.EventType).HasColumnName("event_type");
             entity.Property(item => item.AggregateId).HasColumnName("aggregate_id");
