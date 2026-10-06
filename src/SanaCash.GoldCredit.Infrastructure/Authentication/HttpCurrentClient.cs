@@ -5,7 +5,7 @@ using SanaCash.GoldCredit.Domain.Shared;
 
 namespace SanaCash.GoldCredit.Infrastructure.Authentication;
 
-public sealed class HttpCurrentClient(IHttpContextAccessor httpContextAccessor) : ICurrentClient
+public class HttpCurrentClient(IHttpContextAccessor httpContextAccessor) : ICurrentClient
 {
     private ClaimsPrincipal User => httpContextAccessor.HttpContext?.User
         ?? throw new InvalidOperationException("No authenticated HTTP client is available.");

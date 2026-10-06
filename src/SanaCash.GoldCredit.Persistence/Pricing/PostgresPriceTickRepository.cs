@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SanaCash.GoldCredit.Domain.Pricing;
 using SanaCash.GoldCredit.Domain.Shared;
@@ -7,8 +8,16 @@ using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Pricing;
 
-public sealed class PostgresPriceTickRepository(PostgresSession session, NpgsqlDataSource dataSource) : IPriceTickRepository
+public class PostgresPriceTickRepository(
+    GoldCreditDbContext context,
+    PostgresSession session,
+    NpgsqlDataSource dataSource) : GenericRepository<PriceTickEntity>(context, session), IPriceTickRepository
 {
+    public PostgresPriceTickRepository(PostgresSession session, NpgsqlDataSource dataSource)
+        : this(CreateContext(dataSource), session, dataSource)
+    {
+    }
+
     public async Task<bool> TryAddAsync(PriceTick tick, CancellationToken cancellationToken = default)
     {
         var instrument = tick.Id.Instrument.Code;
@@ -57,30 +66,37 @@ public sealed class PostgresPriceTickRepository(PostgresSession session, NpgsqlD
 
     public async Task<PriceTick?> GetLatestAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(
-            "SELECT ts, instrument, sequence, price_irr_per_gram FROM pricing.price_ticks " +
-            "ORDER BY ts DESC LIMIT 1;",
-            connection);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        var entity = await Entities
+            .AsNoTracking()
+            .OrderByDescending(item => item.Timestamp)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (entity is null)
         {
             return null;
         }
 
-        var instrument = Instrument.Create(reader.GetString(1));
+        var instrument = Instrument.Create(entity.Instrument);
         if (instrument.IsFailure)
         {
             throw new InvalidOperationException("Persisted price tick contains an unknown instrument.");
         }
 
-        var tickId = TickId.Create(instrument.Value, reader.GetInt64(2));
-        var price = ReferencePrice.Create(reader.GetInt64(3));
+        var tickId = TickId.Create(instrument.Value, entity.Sequence);
+        var price = ReferencePrice.Create(entity.PriceIrrPerGram);
         if (tickId.IsFailure || price.IsFailure)
         {
             throw new InvalidOperationException("Persisted price tick contains invalid domain values.");
         }
 
-        return PriceTick.Create(tickId.Value, price.Value, reader.GetFieldValue<DateTimeOffset>(0));
+        return PriceTick.Create(tickId.Value, price.Value, entity.Timestamp);
+    }
+
+    private static GoldCreditDbContext CreateContext(NpgsqlDataSource dataSource)
+    {
+        var options = new DbContextOptionsBuilder<GoldCreditDbContext>()
+            .UseNpgsql(dataSource)
+            .Options;
+        return new GoldCreditDbContext(options);
     }
 }

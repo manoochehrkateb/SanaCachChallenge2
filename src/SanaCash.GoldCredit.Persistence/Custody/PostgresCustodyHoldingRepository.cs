@@ -1,54 +1,82 @@
 using System.Data;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Domain.Custody;
 using SanaCash.GoldCredit.Domain.Shared;
 using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Custody;
 
-public sealed class PostgresCustodyHoldingRepository(PostgresSession session) : ICustodyHoldingRepository
+public class PostgresCustodyHoldingRepository(
+    GoldCreditDbContext context,
+    PostgresSession session) : GenericRepository<CustodyHoldingEntity>(context, session), ICustodyHoldingRepository
 {
-    public async Task<CustodyHolding?> GetForUpdateAsync(ClientId clientId, CancellationToken cancellationToken = default)
+    public PostgresCustodyHoldingRepository(PostgresSession session)
+        : this(CreateContext(session), session)
     {
-        await using var command = new NpgsqlCommand(
-            "SELECT instrument, free_fine_mg, version FROM custody.holdings " +
-            "WHERE client_id = @client_id AND instrument = 'XAU-750' FOR UPDATE;",
-            session.Connection,
-            session.Transaction);
-        command.Parameters.AddWithValue("client_id", clientId.Value);
+    }
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+    public async Task<CustodyHolding?> GetForUpdateAsync(
+        ClientId clientId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await Entities
+            .FromSqlInterpolated($"SELECT client_id, instrument, free_fine_mg, version FROM custody.holdings WHERE client_id = {clientId.Value} AND instrument = {Instrument.Xau750.Code} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (entity is null)
         {
             return null;
         }
 
-        var instrument = Instrument.Create(reader.GetString(0));
+        var instrument = Instrument.Create(entity.Instrument);
         if (instrument.IsFailure)
         {
             throw new InvalidOperationException("Persisted custody holding has an unknown instrument.");
         }
 
         var id = CustodyHoldingId.Create(clientId, instrument.Value);
-        return CustodyHolding.Restore(id, FineWeightMg.Create(reader.GetInt64(1)).Value, reader.GetInt64(2));
+        return CustodyHolding.Restore(
+            id,
+            FineWeightMg.Create(entity.FreeFineMg).Value,
+            entity.Version);
     }
 
-    public async Task UpdateAsync(CustodyHolding holding, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(
+        CustodyHolding holding,
+        CancellationToken cancellationToken = default)
     {
-        await using var command = new NpgsqlCommand(
-            "UPDATE custody.holdings SET free_fine_mg = @free_fine_mg, version = @version " +
-            "WHERE client_id = @client_id AND instrument = @instrument AND version = @expected_version;",
-            session.Connection,
-            session.Transaction);
-        command.Parameters.AddWithValue("free_fine_mg", holding.FreeFineWeight.Value);
-        command.Parameters.AddWithValue("version", holding.Version);
-        command.Parameters.AddWithValue("client_id", holding.Id.ClientId.Value);
-        command.Parameters.AddWithValue("instrument", holding.Id.Instrument.Code);
-        command.Parameters.AddWithValue("expected_version", checked(holding.Version - 1));
+        var entity = await Entities.FindAsync(
+            [holding.Id.ClientId.Value, holding.Id.Instrument.Code],
+            cancellationToken);
 
-        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+        if (entity is null)
         {
             throw new DBConcurrencyException("Custody holding changed after it was loaded for update.");
         }
+
+        entity.FreeFineMg = holding.FreeFineWeight.Value;
+        entity.Version = holding.Version;
+        Context.Entry(entity).Property(item => item.Version).OriginalValue = checked(holding.Version - 1);
+
+        try
+        {
+            await SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new DBConcurrencyException(
+                "Custody holding changed after it was loaded for update.",
+                exception);
+        }
+    }
+
+    private static GoldCreditDbContext CreateContext(PostgresSession session)
+    {
+        var context = new GoldCreditDbContext(
+            new DbContextOptionsBuilder<GoldCreditDbContext>()
+                .UseNpgsql(session.Connection)
+                .Options);
+        context.Database.UseTransaction(session.Transaction);
+        return context;
     }
 }

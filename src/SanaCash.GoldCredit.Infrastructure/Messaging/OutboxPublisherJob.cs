@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace SanaCash.GoldCredit.Infrastructure.Messaging;
 
-public sealed class OutboxPublisherJob(
+public class OutboxPublisherJob(
     OutboxPublisher publisher,
     ILogger<OutboxPublisherJob> logger) : BackgroundService
 {

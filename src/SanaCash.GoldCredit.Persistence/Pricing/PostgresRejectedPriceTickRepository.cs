@@ -1,33 +1,49 @@
 using System.Text.Json;
-using Npgsql;
-using NpgsqlTypes;
+using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Domain.Pricing;
 using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Pricing;
 
-public sealed class PostgresRejectedPriceTickRepository(PostgresSession session) : IRejectedPriceTickRepository
+public class PostgresRejectedPriceTickRepository(
+    GoldCreditDbContext context,
+    PostgresSession session) : GenericRepository<RejectedPriceTickEntity>(context, session), IRejectedPriceTickRepository
 {
+    public PostgresRejectedPriceTickRepository(PostgresSession session)
+        : this(CreateContext(session), session)
+    {
+    }
+
     public async Task AddAsync(RejectedPriceTick tick, CancellationToken cancellationToken = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        var entity = new RejectedPriceTickEntity
         {
-            tick.Instrument,
-            tick.Sequence,
-            tick.Price,
-            TimestampUtc = tick.Timestamp,
-            tick.RawPayload
-        });
+            Id = tick.Id,
+            ReceivedAt = tick.Timestamp.ToUniversalTime(),
+            Instrument = tick.Instrument,
+            Sequence = tick.Sequence,
+            Payload = JsonSerializer.Serialize(new
+            {
+                tick.Instrument,
+                tick.Sequence,
+                tick.Price,
+                TimestampUtc = tick.Timestamp,
+                tick.RawPayload
+            }),
+            RejectionReason = tick.Reason.ToString()
+        };
 
-        await using var command = new NpgsqlCommand(
-            "INSERT INTO pricing.rejected_price_ticks (received_at, instrument, sequence, payload, rejection_reason) " +
-            "VALUES (now(), @instrument, @sequence, @payload, @reason);",
-            session.Connection,
-            session.Transaction);
-        command.Parameters.AddWithValue("instrument", (object?)tick.Instrument ?? DBNull.Value);
-        command.Parameters.AddWithValue("sequence", tick.Sequence);
-        command.Parameters.Add("payload", NpgsqlDbType.Jsonb).Value = payload;
-        command.Parameters.AddWithValue("reason", tick.Reason.ToString());
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await AddAsync(entity, cancellationToken);
+        await SaveChangesAsync(cancellationToken);
+    }
+
+    private static GoldCreditDbContext CreateContext(PostgresSession session)
+    {
+        var context = new GoldCreditDbContext(
+            new DbContextOptionsBuilder<GoldCreditDbContext>()
+                .UseNpgsql(session.Connection)
+                .Options);
+        context.Database.UseTransaction(session.Transaction);
+        return context;
     }
 }

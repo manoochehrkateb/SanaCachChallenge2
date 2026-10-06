@@ -2,7 +2,7 @@ using Npgsql;
 
 namespace SanaCash.GoldCredit.Persistence.Common;
 
-public sealed class PostgresSession
+public class PostgresSession
 {
     private NpgsqlConnection? _connection;
     private NpgsqlTransaction? _transaction;

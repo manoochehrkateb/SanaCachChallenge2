@@ -6,7 +6,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Pricing.IngestPriceTick;
 
-public sealed class IngestPriceTickHandler(
+public class IngestPriceTickHandler(
     PriceTickValidator validator,
     IPriceTickRepository ticks,
     IRejectedPriceTickRepository rejectedTicks,

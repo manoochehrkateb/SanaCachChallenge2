@@ -1,6 +1,6 @@
 namespace SanaCash.GoldCredit.Domain.Pricing;
 
-public sealed class PriceFreshnessPolicy
+public class PriceFreshnessPolicy
 {
     public static readonly TimeSpan MaximumAge = TimeSpan.FromSeconds(30);
 

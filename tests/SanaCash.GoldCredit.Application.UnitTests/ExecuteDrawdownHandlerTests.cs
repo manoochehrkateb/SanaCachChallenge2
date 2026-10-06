@@ -11,7 +11,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.UnitTests;
 
-public sealed class ExecuteDrawdownHandlerTests
+public class ExecuteDrawdownHandlerTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
@@ -102,18 +102,18 @@ public sealed class ExecuteDrawdownHandlerTests
             idempotency,
             outbox);
 
-    private sealed class FakeCurrentClient(ClientId clientId) : ICurrentClient
+private class FakeCurrentClient(ClientId clientId) : ICurrentClient
     {
         public ClientId ClientId { get; } = clientId;
         public bool IsRiskOfficer => false;
     }
 
-    private sealed class FakeClock(DateTimeOffset utcNow) : IClock
+private class FakeClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
     }
 
-    private sealed class FakeFacilityRepository(CreditFacility facility) : ICreditFacilityRepository
+private class FakeFacilityRepository(CreditFacility facility) : ICreditFacilityRepository
     {
         public int UpdateCount { get; private set; }
 
@@ -127,20 +127,20 @@ public sealed class ExecuteDrawdownHandlerTests
         }
     }
 
-    private sealed class FakeReferencePriceProvider(ReferencePriceQuote? quote) : IReferencePriceProvider
+private class FakeReferencePriceProvider(ReferencePriceQuote? quote) : IReferencePriceProvider
     {
         public Task<ReferencePriceQuote?> GetLatestAsync(Instrument instrument, CancellationToken cancellationToken = default) =>
             Task.FromResult(quote);
     }
 
-    private sealed class InlineUnitOfWork : IUnitOfWork
+private class InlineUnitOfWork : IUnitOfWork
     {
         public Task<TResult> ExecuteInTransactionAsync<TResult>(
             Func<CancellationToken, Task<TResult>> operation,
             CancellationToken cancellationToken = default) => operation(cancellationToken);
     }
 
-    private sealed class FakeIdempotencyStore : IIdempotencyStore
+private class FakeIdempotencyStore : IIdempotencyStore
     {
         public string? Operation { get; private set; }
         public string? Key { get; private set; }
@@ -159,7 +159,7 @@ public sealed class ExecuteDrawdownHandlerTests
         }
     }
 
-    private sealed class FakeOutboxWriter : IOutboxWriter
+private class FakeOutboxWriter : IOutboxWriter
     {
         public object? LastEvent { get; private set; }
 

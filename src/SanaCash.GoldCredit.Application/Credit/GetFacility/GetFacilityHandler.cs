@@ -15,7 +15,7 @@ public sealed record FacilityDetails(
     bool IsLtvInfinite,
     DateTimeOffset? PriceTimestampUtc);
 
-public sealed class GetFacilityHandler(
+public class GetFacilityHandler(
     ICurrentClient currentClient,
     IFacilityReadStore facilities,
     IReferencePriceProvider referencePrices)

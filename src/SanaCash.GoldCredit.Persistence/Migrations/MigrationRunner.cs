@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace SanaCash.GoldCredit.Persistence.Migrations;
 
-public sealed class MigrationRunner(NpgsqlDataSource dataSource)
+public class MigrationRunner(NpgsqlDataSource dataSource)
 {
     public async Task ApplyAsync(CancellationToken cancellationToken = default)
     {

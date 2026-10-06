@@ -15,7 +15,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Credit.ExecuteDrawdown;
 
-public sealed class ExecuteDrawdownHandler(
+public class ExecuteDrawdownHandler(
     ICurrentClient currentClient,
     ICreditFacilityRepository facilities,
     IReferencePriceProvider referencePrices,

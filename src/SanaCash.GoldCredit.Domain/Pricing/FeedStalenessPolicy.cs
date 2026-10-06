@@ -2,7 +2,7 @@ using SanaCash.GoldCredit.Domain.Pricing.Enums;
 
 namespace SanaCash.GoldCredit.Domain.Pricing;
 
-public sealed class FeedStalenessPolicy
+public class FeedStalenessPolicy
 {
     public static readonly TimeSpan MaximumRealTickAge = TimeSpan.FromMinutes(2);
 

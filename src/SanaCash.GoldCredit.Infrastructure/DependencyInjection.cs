@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using Confluent.Kafka;
 using Npgsql;
 using SanaCash.GoldCredit.Application.Abstractions.Authentication;
@@ -43,6 +44,8 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("ConnectionStrings:GoldCredit is required.");
 
         services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddDbContext<GoldCreditDbContext>(options =>
+            options.UseNpgsql(connectionString));
         var kafkaConfiguration = configuration.GetSection("Kafka");
         services.Configure<KafkaOptions>(options =>
         {
@@ -64,6 +67,7 @@ public static class DependencyInjection
         services.AddSingleton<MigrationRunner>();
         services.AddScoped<PostgresSession>();
         services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
+        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<ICreditFacilityRepository, PostgresCreditFacilityRepository>();
         services.AddScoped<IFacilityReadStore, PostgresFacilityReadStore>();
         services.AddScoped<IMarginEvaluationRepository, PostgresMarginEvaluationRepository>();

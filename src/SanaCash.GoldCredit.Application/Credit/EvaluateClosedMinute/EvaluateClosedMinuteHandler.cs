@@ -8,7 +8,7 @@ using SanaCash.GoldCredit.Domain.Shared;
 
 namespace SanaCash.GoldCredit.Application.Credit.EvaluateClosedMinute;
 
-public sealed class EvaluateClosedMinuteHandler(
+public class EvaluateClosedMinuteHandler(
     IMarginEvaluationRepository evaluations,
     MarginPolicy marginPolicy,
     FeedStalenessPolicy stalenessPolicy,

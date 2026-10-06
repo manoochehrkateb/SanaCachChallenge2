@@ -8,7 +8,7 @@ namespace SanaCash.GoldCredit.Presentation.Controllers.Pricing;
 [ApiController]
 [Authorize]
 [Route("api/market/instruments/{instrument}/candles")]
-public sealed class MarketController(GetCandlesHandler getCandlesHandler) : ControllerBase
+public class MarketController(GetCandlesHandler getCandlesHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetCandles(

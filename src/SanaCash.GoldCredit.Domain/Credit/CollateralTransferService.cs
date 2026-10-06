@@ -4,7 +4,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Credit;
 
-public sealed class CollateralTransferService
+public class CollateralTransferService
 {
     public Result ValidatePledge(CustodyHolding holding, CreditFacility facility, FineWeightMg amount)
     {

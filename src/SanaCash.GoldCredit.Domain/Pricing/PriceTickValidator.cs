@@ -5,7 +5,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Pricing;
 
-public sealed class PriceTickValidator
+public class PriceTickValidator
 {
     private static readonly TimeSpan FutureTolerance = TimeSpan.FromSeconds(2);
 

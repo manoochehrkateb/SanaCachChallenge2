@@ -12,7 +12,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Credit.ReleaseCollateral;
 
-public sealed class ReleaseCollateralHandler(
+public class ReleaseCollateralHandler(
     ICurrentClient currentClient,
     ICreditFacilityRepository facilities,
     ICustodyHoldingRepository holdings,

@@ -5,7 +5,7 @@ using SanaCash.GoldCredit.Application.Credit.EvaluateClosedMinute;
 
 namespace SanaCash.GoldCredit.Infrastructure.BackgroundJobs;
 
-public sealed class MarginEvaluatorJob(
+public class MarginEvaluatorJob(
     IServiceScopeFactory scopeFactory,
     ILogger<MarginEvaluatorJob> logger) : BackgroundService
 {

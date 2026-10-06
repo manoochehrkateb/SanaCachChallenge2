@@ -12,7 +12,7 @@ using SanaCash.GoldCredit.Persistence.Migrations;
 
 namespace SanaCash.GoldCredit.IntegrationTests;
 
-public sealed class MarginEvaluatorIntegrationTests
+public class MarginEvaluatorIntegrationTests
 {
     [PostgresIntegrationFact]
     public async Task Three_breach_minutes_issue_one_call_and_competing_evaluators_issue_one_liquidation()
@@ -242,7 +242,7 @@ public sealed class MarginEvaluatorIntegrationTests
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private sealed class FixedClock(DateTimeOffset utcNow) : IClock
+private class FixedClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
     }

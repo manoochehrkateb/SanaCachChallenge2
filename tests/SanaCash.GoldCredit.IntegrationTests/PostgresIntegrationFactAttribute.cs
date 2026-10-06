@@ -2,7 +2,7 @@ using Xunit;
 
 namespace SanaCash.GoldCredit.IntegrationTests;
 
-public sealed class PostgresIntegrationFactAttribute : FactAttribute
+public class PostgresIntegrationFactAttribute : FactAttribute
 {
     public PostgresIntegrationFactAttribute()
     {

@@ -10,7 +10,7 @@ using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Credit;
 
-public sealed class PostgresMarginEvaluationRepository(
+public class PostgresMarginEvaluationRepository(
     NpgsqlDataSource dataSource,
     PostgresSession session) : IMarginEvaluationRepository
 {

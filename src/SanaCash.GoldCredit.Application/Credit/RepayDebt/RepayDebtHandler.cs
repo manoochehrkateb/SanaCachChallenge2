@@ -9,7 +9,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Credit.RepayDebt;
 
-public sealed class RepayDebtHandler(
+public class RepayDebtHandler(
     ICurrentClient currentClient,
     ICreditFacilityRepository facilities,
     IClock clock,

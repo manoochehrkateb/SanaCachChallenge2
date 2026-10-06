@@ -2,7 +2,7 @@ using SanaCash.GoldCredit.Domain.Credit.Enums;
 
 namespace SanaCash.GoldCredit.Domain.Credit;
 
-public sealed class MarginPolicy
+public class MarginPolicy
 {
     public FacilityStatus Evaluate(FacilityStatus currentStatus, IReadOnlyList<MinuteSnapshot> recentSnapshots)
     {

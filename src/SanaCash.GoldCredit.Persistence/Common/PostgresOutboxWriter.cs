@@ -1,12 +1,18 @@
 using System.Text.Json;
-using Npgsql;
-using NpgsqlTypes;
+using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
 
 namespace SanaCash.GoldCredit.Persistence.Common;
 
-public sealed class PostgresOutboxWriter(PostgresSession session) : IOutboxWriter
+public class PostgresOutboxWriter(
+    GoldCreditDbContext context,
+    PostgresSession session) : GenericRepository<OutboxMessage>(context, session), IOutboxWriter
 {
+    public PostgresOutboxWriter(PostgresSession session)
+        : this(CreateContext(session), session)
+    {
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task AddAsync<TIntegrationEvent>(
@@ -16,16 +22,27 @@ public sealed class PostgresOutboxWriter(PostgresSession session) : IOutboxWrite
         CancellationToken cancellationToken = default)
         where TIntegrationEvent : notnull
     {
-        await using var command = new NpgsqlCommand(
-            "INSERT INTO platform.outbox_messages (event_id, event_type, aggregate_id, payload, occurred_at) " +
-            "VALUES (@event_id, @event_type, @aggregate_id, @payload, @occurred_at);",
-            session.Connection,
-            session.Transaction);
-        command.Parameters.AddWithValue("event_id", eventId);
-        command.Parameters.AddWithValue("event_type", typeof(TIntegrationEvent).Name);
-        command.Parameters.AddWithValue("aggregate_id", partitionKey);
-        command.Parameters.Add("payload", NpgsqlDbType.Jsonb).Value = JsonSerializer.Serialize(integrationEvent, JsonOptions);
-        command.Parameters.AddWithValue("occurred_at", DateTimeOffset.UtcNow);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var entity = new OutboxMessage
+        {
+            EventId = eventId,
+            EventType = typeof(TIntegrationEvent).Name,
+            AggregateId = partitionKey,
+            Payload = JsonSerializer.Serialize(integrationEvent, JsonOptions),
+            OccurredAt = DateTimeOffset.UtcNow,
+            Attempts = 0
+        };
+
+        await AddAsync(entity, cancellationToken);
+        await SaveChangesAsync(cancellationToken);
+    }
+
+    private static GoldCreditDbContext CreateContext(PostgresSession session)
+    {
+        var context = new GoldCreditDbContext(
+            new DbContextOptionsBuilder<GoldCreditDbContext>()
+                .UseNpgsql(session.Connection)
+                .Options);
+        context.Database.UseTransaction(session.Transaction);
+        return context;
     }
 }

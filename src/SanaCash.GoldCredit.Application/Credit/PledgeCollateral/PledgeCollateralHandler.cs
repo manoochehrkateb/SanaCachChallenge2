@@ -10,7 +10,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Credit.PledgeCollateral;
 
-public sealed class PledgeCollateralHandler(
+public class PledgeCollateralHandler(
     ICurrentClient currentClient,
     ICreditFacilityRepository facilities,
     ICustodyHoldingRepository holdings,

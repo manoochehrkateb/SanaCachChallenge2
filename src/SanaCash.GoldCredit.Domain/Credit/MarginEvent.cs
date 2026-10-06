@@ -4,7 +4,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Credit;
 
-public sealed class MarginEvent : Entity<Guid>
+public class MarginEvent : Entity<Guid>
 {
     public MarginEvent(Guid eventId, FacilityId facilityId, MarginEventType type,
         int episodeNumber, MarginEvidence evidence, DateTimeOffset occurredAtUtc) : base(eventId)

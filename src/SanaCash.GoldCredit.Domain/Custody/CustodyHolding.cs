@@ -3,7 +3,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Custody;
 
-public sealed class CustodyHolding : AggregateRoot<CustodyHoldingId>
+public class CustodyHolding : AggregateRoot<CustodyHoldingId>
 {
     private CustodyHolding(CustodyHoldingId id, FineWeightMg freeFineWeight) : base(id) => FreeFineWeight = freeFineWeight;
 

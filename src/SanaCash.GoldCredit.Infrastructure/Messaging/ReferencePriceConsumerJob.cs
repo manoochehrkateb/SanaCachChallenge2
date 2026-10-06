@@ -9,7 +9,7 @@ using SanaCash.GoldCredit.Domain.Pricing;
 
 namespace SanaCash.GoldCredit.Infrastructure.Messaging;
 
-public sealed class ReferencePriceConsumerJob(
+public class ReferencePriceConsumerJob(
     IServiceScopeFactory scopeFactory,
     IOptions<KafkaOptions> options,
     ILogger<ReferencePriceConsumerJob> logger) : BackgroundService

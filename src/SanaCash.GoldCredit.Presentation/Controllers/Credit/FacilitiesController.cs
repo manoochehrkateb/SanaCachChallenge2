@@ -14,7 +14,7 @@ namespace SanaCash.GoldCredit.Presentation.Controllers.Credit;
 [ApiController]
 [Authorize]
 [Route("api/facilities/{facilityId:guid}")]
-public sealed class FacilitiesController(
+public class FacilitiesController(
     PledgeCollateralHandler pledgeHandler,
     ReleaseCollateralHandler releaseHandler,
     ExecuteDrawdownHandler drawdownHandler,

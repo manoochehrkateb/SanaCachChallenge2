@@ -1,47 +1,48 @@
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
+using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Credit;
 
-public sealed class PostgresFacilityReadStore(NpgsqlDataSource dataSource) : IFacilityReadStore
+public class PostgresFacilityReadStore(
+    GoldCreditDbContext context,
+    PostgresSession session,
+    IGenericRepository<MarginEventEntity> marginEvents) : GenericRepository<CreditFacilityEntity>(context, session), IFacilityReadStore
 {
-    public async Task<FacilityReadModel?> GetFacilityAsync(Guid facilityId, CancellationToken cancellationToken = default)
+    public async Task<FacilityReadModel?> GetFacilityAsync(
+        Guid facilityId,
+        CancellationToken cancellationToken = default)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(
-            "SELECT facility_id, client_id, collateral_fine_mg, debt_irr, status, version " +
-            "FROM credit.facilities WHERE facility_id = @facility_id;",
-            connection);
-        command.Parameters.AddWithValue("facility_id", facilityId);
+        var entity = await Entities
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.FacilityId == facilityId, cancellationToken);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? new FacilityReadModel(
-                reader.GetGuid(0), reader.GetGuid(1), reader.GetInt64(2), reader.GetInt64(3),
-                reader.GetString(4), reader.GetInt64(5))
-            : null;
+        return entity is null
+            ? null
+            : new FacilityReadModel(
+                entity.FacilityId,
+                entity.ClientId,
+                entity.CollateralFineMg,
+                entity.DebtIrr,
+                entity.Status,
+                entity.Version);
     }
 
     public async Task<IReadOnlyList<MarginEventReadModel>> GetMarginEventsAsync(
         Guid facilityId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(
-            "SELECT event_id, event_type, episode_number, occurred_at, evidence::text " +
-            "FROM credit.margin_events WHERE facility_id = @facility_id ORDER BY occurred_at, event_id;",
-            connection);
-        command.Parameters.AddWithValue("facility_id", facilityId);
-
-        var results = new List<MarginEventReadModel>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            results.Add(new MarginEventReadModel(
-                reader.GetGuid(0), reader.GetString(1), reader.GetInt32(2),
-                reader.GetFieldValue<DateTimeOffset>(3), reader.GetString(4)));
-        }
-
-        return results;
+        return await marginEvents.Query()
+            .AsNoTracking()
+            .Where(item => item.FacilityId == facilityId)
+            .OrderBy(item => item.OccurredAt)
+            .ThenBy(item => item.EventId)
+            .Select(item => new MarginEventReadModel(
+                item.EventId,
+                item.EventType,
+                item.EpisodeNumber,
+                item.OccurredAt,
+                item.Evidence))
+            .ToListAsync(cancellationToken);
     }
 }

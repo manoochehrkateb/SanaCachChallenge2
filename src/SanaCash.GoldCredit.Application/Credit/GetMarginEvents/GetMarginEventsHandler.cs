@@ -4,7 +4,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Credit.GetMarginEvents;
 
-public sealed class GetMarginEventsHandler(ICurrentClient currentClient, IFacilityReadStore facilities)
+public class GetMarginEventsHandler(ICurrentClient currentClient, IFacilityReadStore facilities)
 {
     public async Task<Result<IReadOnlyList<MarginEventReadModel>>> HandleAsync(
         Guid facilityId,

@@ -5,7 +5,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Credit;
 
-public sealed class CreditFacility : AggregateRoot<FacilityId>
+public class CreditFacility : AggregateRoot<FacilityId>
 {
     private CreditFacility(FacilityId id, ClientId clientId) : base(id)
     {

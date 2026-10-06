@@ -4,7 +4,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.Pricing.GetCandles;
 
-public sealed class GetCandlesHandler(IMarketReadStore market)
+public class GetCandlesHandler(IMarketReadStore market)
 {
     public Task<Result<IReadOnlyList<PriceCandleReadModel>>> HandleAsync(
         string instrumentCode,

@@ -3,7 +3,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Pricing;
 
-public sealed class PriceTick : Entity<TickId>
+public class PriceTick : Entity<TickId>
 {
     private PriceTick(TickId id, ReferencePrice price, DateTimeOffset timestampUtc) : base(id)
     {

@@ -14,7 +14,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Application.UnitTests;
 
-public sealed class CollateralCommandHandlerTests
+public class CollateralCommandHandlerTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
@@ -99,18 +99,18 @@ public sealed class CollateralCommandHandlerTests
         return new MinuteSnapshot(MinuteBucket.From(Now), price, debt, collateral, value, Ltv.Calculate(debt, value));
     }
 
-    private sealed class FakeCurrentClient(ClientId clientId) : ICurrentClient
+private class FakeCurrentClient(ClientId clientId) : ICurrentClient
     {
         public ClientId ClientId { get; } = clientId;
         public bool IsRiskOfficer => false;
     }
 
-    private sealed class FakeClock : IClock
+private class FakeClock : IClock
     {
         public DateTimeOffset UtcNow => Now;
     }
 
-    private sealed class FakeFacilityRepository(CreditFacility facility, List<string> locks) : ICreditFacilityRepository
+private class FakeFacilityRepository(CreditFacility facility, List<string> locks) : ICreditFacilityRepository
     {
         public Task<CreditFacility?> GetForUpdateAsync(FacilityId facilityId, CancellationToken cancellationToken = default)
         {
@@ -121,7 +121,7 @@ public sealed class CollateralCommandHandlerTests
         public Task UpdateAsync(CreditFacility updatedFacility, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeHoldingRepository(CustodyHolding holding, List<string> locks) : ICustodyHoldingRepository
+private class FakeHoldingRepository(CustodyHolding holding, List<string> locks) : ICustodyHoldingRepository
     {
         public Task<CustodyHolding?> GetForUpdateAsync(ClientId clientId, CancellationToken cancellationToken = default)
         {
@@ -132,20 +132,20 @@ public sealed class CollateralCommandHandlerTests
         public Task UpdateAsync(CustodyHolding updatedHolding, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeReferencePriceProvider(DateTimeOffset timestamp) : IReferencePriceProvider
+private class FakeReferencePriceProvider(DateTimeOffset timestamp) : IReferencePriceProvider
     {
         public Task<ReferencePriceQuote?> GetLatestAsync(Instrument instrument, CancellationToken cancellationToken = default) =>
             Task.FromResult<ReferencePriceQuote?>(new(ReferencePrice.Create(120_000_000).Value, timestamp));
     }
 
-    private sealed class InlineUnitOfWork : IUnitOfWork
+private class InlineUnitOfWork : IUnitOfWork
     {
         public Task<TResult> ExecuteInTransactionAsync<TResult>(
             Func<CancellationToken, Task<TResult>> operation,
             CancellationToken cancellationToken = default) => operation(cancellationToken);
     }
 
-    private sealed class FakeIdempotencyStore : IIdempotencyStore
+private class FakeIdempotencyStore : IIdempotencyStore
     {
         public Task<Result<TResponse>> ExecuteAsync<TResponse>(
             ClientId clientId,

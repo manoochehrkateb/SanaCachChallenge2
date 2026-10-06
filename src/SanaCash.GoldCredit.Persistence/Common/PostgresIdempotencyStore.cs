@@ -7,7 +7,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Persistence.Common;
 
-public sealed class PostgresIdempotencyStore(PostgresSession session) : IIdempotencyStore
+public class PostgresIdempotencyStore(PostgresSession session) : IIdempotencyStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

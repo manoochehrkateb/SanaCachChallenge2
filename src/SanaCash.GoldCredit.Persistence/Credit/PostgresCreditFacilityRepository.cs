@@ -7,7 +7,7 @@ using SanaCash.GoldCredit.Persistence.Common;
 
 namespace SanaCash.GoldCredit.Persistence.Credit;
 
-public sealed class PostgresCreditFacilityRepository(PostgresSession session) : ICreditFacilityRepository
+public class PostgresCreditFacilityRepository(PostgresSession session) : ICreditFacilityRepository
 {
     public async Task<CreditFacility?> GetForUpdateAsync(FacilityId facilityId, CancellationToken cancellationToken = default)
     {

@@ -19,7 +19,7 @@ using SanaCash.GoldCredit.Persistence.Pricing;
 
 namespace SanaCash.GoldCredit.IntegrationTests;
 
-public sealed class PostgresCoreFlowTests
+public class PostgresCoreFlowTests
 {
     [PostgresIntegrationFact]
     public async Task Tick_identity_is_deduplicated_and_latest_is_selected_by_timestamp()
@@ -432,18 +432,18 @@ public sealed class PostgresCoreFlowTests
             cancellationToken => repository.TryAddAsync(tick, cancellationToken));
     }
 
-    private sealed class TestCurrentClient(ClientId clientId) : ICurrentClient
+private class TestCurrentClient(ClientId clientId) : ICurrentClient
     {
         public ClientId ClientId { get; } = clientId;
         public bool IsRiskOfficer => false;
     }
 
-    private sealed class FixedClock(DateTimeOffset utcNow) : IClock
+private class FixedClock(DateTimeOffset utcNow) : IClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
     }
 
-    private sealed class FixedReferencePriceProvider(ReferencePriceQuote quote) : IReferencePriceProvider
+private class FixedReferencePriceProvider(ReferencePriceQuote quote) : IReferencePriceProvider
     {
         public Task<ReferencePriceQuote?> GetLatestAsync(
             Instrument instrument,

@@ -3,7 +3,7 @@ using SanaCash.GoldCredit.Domain.Shared.Primitives;
 
 namespace SanaCash.GoldCredit.Domain.Pricing;
 
-public sealed class RejectedPriceTick : Entity<Guid>
+public class RejectedPriceTick : Entity<Guid>
 {
     private RejectedPriceTick(Guid id, string instrument, long sequence, long price, DateTimeOffset timestamp,
         TickRejectionReason reason, string? rawPayload = null) : base(id)

@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace SanaCash.GoldCredit.Infrastructure.Messaging;
 
-public sealed class OutboxPublisher(
+public class OutboxPublisher(
     NpgsqlDataSource dataSource,
     IProducer<string, string> producer,
     IOptions<KafkaOptions> options,

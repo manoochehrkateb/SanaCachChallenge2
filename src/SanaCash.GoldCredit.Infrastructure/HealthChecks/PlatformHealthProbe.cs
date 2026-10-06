@@ -11,7 +11,7 @@ using SanaCash.GoldCredit.Infrastructure.Messaging;
 
 namespace SanaCash.GoldCredit.Infrastructure.HealthChecks;
 
-public sealed class PlatformHealthProbe(
+public class PlatformHealthProbe(
     NpgsqlDataSource dataSource,
     IOptions<KafkaOptions> kafkaOptions,
     IReferencePriceProvider referencePrices,
