@@ -105,7 +105,7 @@ public class CreditFacility : AggregateRoot<FacilityId>
     {
         if (Status != FacilityStatus.Healthy)
         {
-            return Result.Failure(new Error("FacilityNotHealthy", "Drawdown requires a healthy facility."));
+            return Result.Failure(new Error("FacilityLiquidationRequired", "Drawdown is not allowed after liquidation is required."));
         }
 
         if (amount.Value <= 0)
