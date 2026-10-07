@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SanaCash.GoldCredit.Application.Abstractions.Data;
 

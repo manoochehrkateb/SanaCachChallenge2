@@ -66,7 +66,10 @@ public static class DependencyInjection
         services.AddSingleton<OutboxPublisher>();
         services.AddSingleton<MigrationRunner>();
         services.AddScoped<PostgresSession>();
-        services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
+        services.AddScoped<IUnitOfWork>(serviceProvider =>
+            new PostgresUnitOfWork(
+                serviceProvider.GetRequiredService<GoldCreditDbContext>(),
+                serviceProvider.GetRequiredService<PostgresSession>()));
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<ICreditFacilityRepository, PostgresCreditFacilityRepository>();
         services.AddScoped<IFacilityReadStore, PostgresFacilityReadStore>();
